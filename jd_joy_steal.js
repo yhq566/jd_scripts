@@ -1,21 +1,33 @@
 /*
+ * @Author: LXK9301 https://github.com/LXK9301
+ * @Date: 2020-07-16 18:54:16
+ * @Last Modified by: LXK9301
+ * @Last Modified time: 2021-1-21 21:22:37
+ */
+/*
+活动入口：京东APP我的-更多工具-宠汪汪
+最近经常出现给偷好友积分与狗粮失败的情况，故建议cron设置为多次
 jd宠汪汪偷好友积分与狗粮,及给好友喂食
 偷好友积分上限是20个好友(即获得100积分)，帮好友喂食上限是20个好友(即获得200积分)，偷好友狗粮上限也是20个好友(最多获得120g狗粮)
 IOS用户支持京东双账号,NodeJs用户支持N个京东账号
 脚本兼容: QuantumultX, Surge, Loon, JSBox, Node.js
-更新时间:2021-1-17
 如果开启了给好友喂食功能，建议先凌晨0点运行jd_joy.js脚本获取狗粮后，再运行此脚本(jd_joy_steal.js)可偷好友积分，6点运行可偷好友狗粮
-注：如果使用Node.js, 需自行安装'crypto-js,got,http-server,tough-cookie'模块. 例: npm install crypto-js http-server tough-cookie got --save
+==========Quantumult X==========
+[task_local]
+#宠汪汪偷好友积分与狗粮
+0 0-10/2 * * * https://gitee.com/lxk0301/jd_scripts/raw/master/jd_joy_steal.js, tag=宠汪汪偷好友积分与狗粮, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jdcww.png, enabled=true
+
+=======Loon========
+[Script]
+cron "0 0-10/2 * * *" script-path=https://gitee.com/lxk0301/jd_scripts/raw/master/jd_joy_steal.js,tag=宠汪汪偷好友积分与狗粮
+
+========Surge==========
+宠汪汪偷好友积分与狗粮 = type=cron,cronexp="0 0-10/2 * * *",wake-system=1,timeout=3600,script-path=https://gitee.com/lxk0301/jd_scripts/raw/master/jd_joy_steal.js
+
+=======小火箭=====
+宠汪汪偷好友积分与狗粮 = type=cron,script-path=https://gitee.com/lxk0301/jd_scripts/raw/master/jd_joy_steal.js, cronexpr="0 0-10/2 * * *", timeout=3600, enable=true
 */
-// quantumultx
-// [task_local]
-// #宠汪汪偷好友积分与狗粮
-// 0 0,6 * * * https://raw.githubusercontent.com/LXK9301/jd_scripts/master/jd_joy_steal.js, tag=宠汪汪偷好友积分与狗粮, img-url=https://raw.githubusercontent.com/58xinian/icon/master/jdcww.png, enabled=true
-// Loon
-// [Script]
-// cron "0 0,6 * * *" script-path=https://raw.githubusercontent.com/LXK9301/jd_scripts/master/jd_joy_steal.js,tag=宠汪汪偷好友积分与狗粮
-// Surge
-// 宠汪汪偷好友积分与狗粮 = type=cron,cronexp="0 0,6 * * *",wake-system=1,timeout=320,script-path=https://raw.githubusercontent.com/LXK9301/jd_scripts/master/jd_joy_steal.js
+
 const $ = new Env('宠汪汪偷好友积分与狗粮');
 const notify = $.isNode() ? require('./sendNotify') : '';
 //Node.js用户请在jdCookie.js处填写京东ck;
@@ -73,6 +85,8 @@ if ($.isNode() && process.env.jdJoyStealCoin) {
             $.index = i + 1;
             $.isLogin = true;
             $.nickName = '';
+            $.HelpFeedFlag = ctrTemp;
+            if (!ctrTemp) $.HelpFeedFlag = true
             await TotalBean();
             console.log(`\n开始【京东账号${$.index}】${$.nickName || $.UserName}\n`);
             if (!$.isLogin) {
@@ -101,6 +115,8 @@ async function jdJoySteal() {
         $.helpFood = 0;
         $.stealFriendCoin = 0;
         $.stealFood = 0;
+        $.stealStatus = null;
+        $.helpFeedStatus = null;
         message += `【京东账号${$.index}】${$.nickName}\n`;
         await getFriends();//查询是否有好友
         await getCoinChanges();//查询喂食好友和偷好友积分是否已达上限
@@ -129,8 +145,20 @@ async function jdJoySteal() {
                         }
                         break
                     }
-                    if (nowTimes.getHours() < 6) {
-                        $.log('偷好友狗粮 未到6点时间')
+                    if (nowTimes.getHours() < 6 && nowTimes.getHours() > 0) {
+                        $.log('未到早餐时间, 暂不能偷好友狗粮\n')
+                        break
+                    }
+                    if (nowTimes.getHours() === 10 ? (nowTimes.getMinutes() > 30) : (nowTimes.getHours() === 11 && nowTimes.getMinutes() < 30)) {
+                        $.log('未到中餐时间, 暂不能偷好友狗粮\n')
+                        break
+                    }
+                    if ((nowTimes.getHours() >= 15 && nowTimes.getMinutes() > 0) && (nowTimes.getHours() < 17 && nowTimes.getMinutes() <= 59)) {
+                        $.log('未到晚餐时间, 暂不能偷好友狗粮\n')
+                        break
+                    }
+                    if (nowTimes.getHours() >= 21 && nowTimes.getMinutes() > 0 && nowTimes.getHours() <= 23 && nowTimes.getMinutes() <= 59) {
+                        $.log('已过晚餐时间, 暂不能偷好友狗粮\n')
                         break
                     }
                     console.log(`偷好友狗粮 开始查询第${i}页好友\n`);
@@ -148,7 +176,8 @@ async function jdJoySteal() {
                         console.log('帮好友喂食失败，狗粮不足10g 跳出\n');
                         break
                     }
-                    if (!ctrTemp) {
+                    if ($.help_feed >= 10) $.HelpFeedFlag = false;//修复每次运行都会给好友喂食一次的bug
+                    if (!$.HelpFeedFlag) {
                         console.log('您已设置不为好友喂食，现在跳过喂食，如需为好友喂食请在BoxJs打开喂食开关或者更改脚本 jdJoyHelpFeed 处');
                         break
                     }
@@ -217,7 +246,7 @@ async function stealFriendCoinFun() {
 //给好友喂食
 async function helpFriendsFeed() {
     if ($.help_feed !== 200) {
-        if (ctrTemp) {
+        if ($.HelpFeedFlag) {
             console.log(`\n开始给好友喂食`);
             for (let friends of $.allFriends) {
                 const { friendPin, status, stealStatus } = friends;
@@ -228,6 +257,11 @@ async function helpFriendsFeed() {
                     $.helpFeedStatus = helpFeedRes.errorCode;
                     if (helpFeedRes && helpFeedRes.errorCode === 'help_ok' && helpFeedRes.success) {
                         console.log(`帮好友[${friendPin}]喂食10g狗粮成功,你获得10积分\n`);
+                        if (!ctrTemp) {
+                            $.log('为完成为好友单独喂食一次的任务，故此处进行喂食一次')
+                            $.HelpFeedFlag = false;
+                            break
+                        }
                         $.helpFood += 10;
                     } else if (helpFeedRes && helpFeedRes.errorCode === 'chance_full') {
                         console.log('喂食已达上限,不再喂食\n')
@@ -486,13 +520,13 @@ function showMsg() {
         message += $.stealFriendCoin;
         message += $.stealFood;
         message += $.helpFood;
-        let ctrTemp;
+        let flag;
         if ($.getdata('jdJoyStealNotify')) {
-            ctrTemp = `${$.getdata('jdJoyStealNotify')}` === 'false';
+            flag = `${$.getdata('jdJoyStealNotify')}` === 'false';
         } else {
-            ctrTemp = `${jdNotify}` === 'false';
+            flag = `${jdNotify}` === 'false';
         }
-        if (ctrTemp) {
+        if (flag) {
             $.msg($.name, '', message);
         } else {
             $.log(`\n${message}\n`);
